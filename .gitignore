@@ -1,0 +1,5 @@
+**.csv
+model_outputs/
+.idea/
+.venv/
+__pycache__/
