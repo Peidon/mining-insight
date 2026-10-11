@@ -3,3 +3,4 @@ model_outputs/
 .idea/
 .venv/
 __pycache__/
+raw_data/
