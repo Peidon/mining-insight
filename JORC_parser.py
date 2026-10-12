@@ -145,7 +145,7 @@ def _is_collar_header(header_text):
 def _contains_hole_id(normalized_text):
     return any(
         term in normalized_text
-        for term in (" hole id ", " holeid ", " hold id ", " holdid ", " drill hole ", " drillhole ")
+        for term in (" hole id ", " holeid ", " drill hole ", " drillhole ")
     )
 
 
@@ -155,7 +155,7 @@ def _map_columns(header, table_type)->dict[str, int]:
     if table_type == "assays":
         return {
             "hole_id": _find_column(
-                normalized, ("hole id", "holeid", "hold id", "holdid", "drill hole", "drillhole")
+                normalized, ("hole id", "holeid", "drill hole", "drillhole")
             ),
             "from_m": _find_column(normalized, ("from",)),
             "to_m": _find_column(normalized, ("to",)),
@@ -165,7 +165,7 @@ def _map_columns(header, table_type)->dict[str, int]:
 
     return {
         "hole_id": _find_column(
-            normalized, ("hole id", "holeid", "hold id", "holdid", "drill hole", "drillhole")
+            normalized, ("hole id", "holeid", "drill hole", "drillhole")
         ),
         "easting": _find_column(normalized, ("easting", "east", "m e")),
         "northing": _find_column(normalized, ("northing", "north", "m n")),
@@ -288,5 +288,5 @@ def _write_csv(path, fieldnames, rows):
         writer.writerows(rows)
 
 if __name__ == '__main__':
-    result = parse_drilling_data(Path("raw_data/16062026_VAL.pdf"))
+    result = parse_drilling_data(Path("raw_data/31082026_south_emu-triton_reedy_val.pdf"))
     print(result)
