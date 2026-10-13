@@ -5,7 +5,7 @@ from statistics import median
 
 """
 Parse the data of mineral assays and mining hole collars from PDF files.
-Save raw_assays.csv and raw_collars.csv at `{mining_area}_data` directory, {mining_area} is name of mining area.
+Save raw_assays.csv and raw_collars.csv at `{mining_area}` directory, {mining_area} is name of mining area.
 If there already exists the csv files, just overwrite.
 Step 1, locate the data:
 For mining hole collars, find tables which has header that includes "hold id, easting, northing, elevation, start depth, max depth/total depth, azimuth, dip".
@@ -19,7 +19,7 @@ header of raw_collars.csv is "hole_id,easting,northing,elevation,dip,azimuth,tot
 def parse_drilling_data(pdf_path: Path, *, dpi=300, mining_area=None):
     """Render candidate PDF pages, recognize table crops, and overwrite the CSVs.
 
-    Crops are retained in ``<mining_area>_data/table_images`` for inspection.
+    Crops are retained in ``<mining_area>/table_images`` for inspection.
     The PDF filename stem supplies the mining area when it is not specified.
     """
     try:
@@ -33,7 +33,7 @@ def parse_drilling_data(pdf_path: Path, *, dpi=300, mining_area=None):
     if dpi < 150:
         raise ValueError("Use at least 150 DPI so table text remains readable.")
     pdf_path = Path(pdf_path)
-    output_dir = pdf_path.with_name(f"{mining_area or pdf_path.stem}_data")
+    output_dir = pdf_path.with_name(f"{mining_area or pdf_path.stem}")
     output_dir.mkdir(parents=True, exist_ok=True)
     image_dir = output_dir / "table_images"
     image_dir.mkdir(exist_ok=True)
@@ -318,8 +318,8 @@ def _borderless_table(image, *, language):
             boundaries = [0] + [(a[1]+b[0])/2 for a, b in zip(clusters, clusters[1:])] + [image.width]
             def cells(line):
                 row = []
-                for left, right in zip(boundaries, boundaries[1:]):
-                    selected = [w for w in line if left <= w[0]+w[2]/2 < right]
+                for lt, rt in zip(boundaries, boundaries[1:]):
+                    selected = [w for w in line if lt <= w[0]+w[2]/2 < rt]
                     row.append(" ".join(w[4] for w in sorted(selected, key=lambda w: (w[1], w[0]))))
                 return row
             header = cells(header_words)
@@ -476,14 +476,15 @@ def _parse_assay_rows(rows, column_map):
         if not hole_id:
             hole_id = cur_hole_id
 
-        if not from_m:
-            from_m = cur_from
-            to_m = cur_to
+        cur_hole_id = hole_id
 
         if not width_m:
             continue
 
-        cur_hole_id = hole_id
+        if not from_m:
+            from_m = cur_from
+            to_m = cur_to
+
         cur_from = from_m
         cur_to = to_m
         parsed_rows.append(
@@ -557,5 +558,5 @@ def _write_csv(path, fieldnames, rows):
         writer.writerows(rows)
 
 if __name__ == '__main__':
-    result = parse_drilling_data(Path("raw_data/31082026_south_emu-triton_reedy_val.pdf"))
+    result = parse_drilling_data(Path("raw_data/16062026_south_emu-triton_reedy_val.pdf"))
     print(result)
