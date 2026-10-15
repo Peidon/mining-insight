@@ -3,19 +3,6 @@ import re
 from pathlib import Path
 from statistics import median
 
-"""
-Parse the data of mineral assays and mining hole collars from PDF files.
-Save raw_assays.csv and raw_collars.csv at `{mining_area}` directory, {mining_area} is name of mining area.
-If there already exists the csv files, just overwrite.
-Step 1, locate the data:
-For mining hole collars, find tables which has header that includes "hold id, easting, northing, elevation, start depth, max depth/total depth, azimuth, dip".
-For mineral assays, find tables which has header that includes "hold id, from, to, interval".
-step2, Parse these tables, then save data into the csv files.
-Header of raw_assays.csv is "hole_id,from_m,to_m,width_m,au_gpt",
-header of raw_collars.csv is "hole_id,easting,northing,elevation,dip,azimuth,total_depth".
-"""
-
-
 def parse_drilling_data(pdf_path: Path, *, dpi=300, mining_area=None):
     """Render candidate PDF pages, recognize table crops, and overwrite the CSVs.
 
@@ -30,6 +17,7 @@ def parse_drilling_data(pdf_path: Path, *, dpi=300, mining_area=None):
             "Install the parser dependencies with: pip install -r requirements-parser.txt"
         ) from exc
 
+    # dots per inch
     if dpi < 150:
         raise ValueError("Use at least 150 DPI so table text remains readable.")
     pdf_path = Path(pdf_path)
@@ -257,8 +245,8 @@ def _valid_table_header(header):
 
 def _restore_hole_ids(table, pdf_words):
     """Resolve only unique OCR lookalike matches against native PDF spellings."""
-    def key(value):
-        return re.sub(r"[^A-Z0-9]", "", value.upper()).replace("O", "0")
+    def key(w):
+        return re.sub(r"[^A-Z0-9]", "", w.upper()).replace("O", "0")
     spellings = {}
     for word in pdf_words:
         value = word[4]
@@ -412,7 +400,7 @@ def _is_collar_header(header_text):
 def _contains_hole_id(normalized_text):
     return any(
         term in normalized_text
-        for term in (" hole id ", " holeid ", " hold id ", " holdid ", " drill hole ", " drillhole ")
+        for term in (" hole id ", " drill hole ", " drillhole ")
     )
 
 
@@ -422,7 +410,7 @@ def _map_columns(header, table_type)->dict[str, int]:
     if table_type == "assays":
         return {
             "hole_id": _find_column(
-                normalized, ("hole id", "holeid", "hold id", "holdid", "drill hole", "drillhole")
+                normalized, ("hole id", "drill hole", "drillhole")
             ),
             "from_m": _find_column(normalized, ("from",)),
             "to_m": _find_column(normalized, ("to",)),
@@ -432,7 +420,7 @@ def _map_columns(header, table_type)->dict[str, int]:
 
     return {
         "hole_id": _find_column(
-            normalized, ("hole id", "holeid", "hold id", "holdid", "drill hole", "drillhole")
+            normalized, ("hole id", "drill hole", "drillhole")
         ),
         "easting": _find_column(normalized, ("easting", "east", "m e")),
         "northing": _find_column(normalized, ("northing", "north", "m n")),
