@@ -401,6 +401,7 @@ def build_grade_block() -> gp.data.GeoModel:
         },
         "estimated_block_count": int(estimated_mask.sum()),
         "unestimated_block_count": int((~estimated_mask).sum()),
+        "density_t_m3":2.8
     }
     VARIOGRAM_PATH.write_text(json.dumps(metadata, indent=2) + "\n")
     print(f"- Saved grade block model: {GRADE_BLOCK_PATH}")
@@ -503,6 +504,57 @@ def draw_grade_blocks(
     return plotter
 
 
+def calculate() -> float:
+    """
+    According to the grade block model, calculate the total ounce of resources.
+    :return: the total ounce
+    """
+    if not GRADE_BLOCK_PATH.exists():
+        raise FileNotFoundError(f"Missing grade block model: {GRADE_BLOCK_PATH}")
+    blocks = pd.read_csv(GRADE_BLOCK_PATH)
+    dimensions = ["block_dx_m", "block_dy_m", "block_dz_m"]
+    required = {"au_gpt_est", *dimensions}
+    missing = required - set(blocks.columns)
+    if missing:
+        raise ValueError(f"Block model is missing columns: {', '.join(sorted(missing))}")
+    if "block_id" in blocks and blocks["block_id"].duplicated().any():
+        raise ValueError("Duplicate block_id values would double-count contained gold.")
+
+    grades = pd.to_numeric(blocks["au_gpt_est"], errors="raise")
+    estimated = grades.notna()
+    if not estimated.any():
+        return 0.0
+    grades = grades.loc[estimated]
+    if not np.isfinite(grades).all() or (grades < 0).any():
+        raise ValueError("Estimated gold grades must be finite and nonnegative.")
+    sizes = blocks.loc[estimated, dimensions].apply(pd.to_numeric, errors="raise")
+    if not np.isfinite(sizes).all().all() or (sizes <= 0).any().any():
+        raise ValueError("Estimated blocks must have finite, positive dimensions in metres.")
+
+    if "density_t_m3" in blocks:
+        density = pd.to_numeric(blocks.loc[estimated, "density_t_m3"], errors="raise")
+    else:
+        if not VARIOGRAM_PATH.exists():
+            raise FileNotFoundError(f"Missing density metadata: {VARIOGRAM_PATH}")
+        metadata = json.loads(VARIOGRAM_PATH.read_text(encoding="utf-8"))
+        if not isinstance(metadata, dict) or "density_t_m3" not in metadata:
+            raise ValueError(
+                "Provide density_t_m3 in the block CSV or the grade variogram metadata."
+            )
+        density = pd.Series(float(metadata["density_t_m3"]), index=grades.index)
+    if not np.isfinite(density).all() or (density <= 0).any():
+        raise ValueError("Bulk density must be finite and positive, in t/m3.")
+
+    # Volume (m3) * density (t/m3) * grade (g/t) gives contained gold grams.
+    ounces = sizes.prod(axis=1) * density * grades / 31.1034768
+    total_ounces = float(ounces.sum())
+    if not np.isfinite(ounces).all() or not np.isfinite(total_ounces):
+        raise ValueError("Contained gold calculation produced a nonfinite result.")
+    return total_ounces
+
+
+
 if __name__ == "__main__":
     build_grade_block()
-    draw_grade_blocks()
+    # result = calculate()
+    # print(result)
