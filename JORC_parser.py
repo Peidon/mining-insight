@@ -2,6 +2,9 @@ import csv
 import re
 from pathlib import Path
 from statistics import median
+import cv2
+import numpy as np
+import pytesseract
 
 def parse_drilling_data(pdf_path: Path, *, dpi=300, mining_area=None):
     """Render candidate PDF pages, recognize table crops, and overwrite the CSVs.
@@ -25,7 +28,6 @@ def parse_drilling_data(pdf_path: Path, *, dpi=300, mining_area=None):
     output_dir.mkdir(parents=True, exist_ok=True)
     image_dir = output_dir / "table_images"
     image_dir.mkdir(exist_ok=True)
-    cv2, np, _ = _image_dependencies()
 
     assays = []
     collars = []
@@ -97,7 +99,6 @@ def recognize_table(image_path: Path, *, language="eng"):
     """
     from PIL import Image, ImageOps
 
-    cv2, np, _ = _image_dependencies()
     with Image.open(image_path) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
     gray = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2GRAY)
@@ -136,20 +137,7 @@ def recognize_table(image_path: Path, *, language="eng"):
     return _borderless_table(image, language=language)
 
 
-def _image_dependencies():
-    try:
-        import cv2
-        import numpy as np
-        import pytesseract
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(
-            "Install the parser dependencies with: pip install -r requirements-parser.txt"
-        ) from exc
-    return cv2, np, pytesseract
-
-
 def _ocr_text(image, *, language="eng"):
-    _, _, pytesseract = _image_dependencies()
     try:
         return _clean_cell(pytesseract.image_to_string(image, lang=language, config="--psm 6"))
     except pytesseract.TesseractNotFoundError as exc:
@@ -157,9 +145,18 @@ def _ocr_text(image, *, language="eng"):
 
 
 def _line_masks(gray):
-    cv2, _, _ = _image_dependencies()
+    """
+    extract horizontal line and vertical line
+    :param gray:
+    :return:
+    """
     binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15
+        src=gray,
+        maxValue=255,
+        adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        thresholdType=cv2.THRESH_BINARY_INV,
+        blockSize=31,
+        C=15
     )
     height, width = gray.shape
     horizontal = cv2.morphologyEx(
@@ -174,7 +171,6 @@ def _line_masks(gray):
 
 
 def _table_regions(gray):
-    cv2, _, _ = _image_dependencies()
     horizontal, vertical = _line_masks(gray)
     grid = cv2.dilate(cv2.bitwise_or(horizontal, vertical), None, iterations=2)
     contours, _ = cv2.findContours(grid, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -191,7 +187,12 @@ def _table_regions(gray):
 
 
 def _line_positions(mask, *, axis):
-    _, np, _ = _image_dependencies()
+    """
+
+    :param mask:
+    :param axis:
+    :return:
+    """
     counts = np.count_nonzero(mask, axis=axis)
     threshold = max(15, mask.shape[axis] * 0.2)
     positions = np.flatnonzero(counts >= threshold)
@@ -202,7 +203,6 @@ def _line_positions(mask, *, axis):
 
 
 def _with_edges(positions, size, gray, *, axis):
-    _, np, _ = _image_dependencies()
     positions = list(positions)
     ink = np.count_nonzero(gray < 200, axis=axis)
     if positions[0] > 10 and ink[:positions[0]-3].sum() > 20:
@@ -267,7 +267,6 @@ def _restore_hole_ids(table, pdf_words):
 
 
 def _borderless_table(image, *, language):
-    _, _, pytesseract = _image_dependencies()
     try:
         data = pytesseract.image_to_data(
             image, lang=language, config="--psm 6", output_type=pytesseract.Output.DICT
